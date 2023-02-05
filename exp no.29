@@ -1,0 +1,164 @@
+#include <iostream>
+#include <cmath>
+#include <ctime>
+#include <vector>
+#include <algorithm>
+#include <functional>
+
+//row [0]:  c00  c01  c02  c03   
+//row [1]:  c10  c11  c12  c13  
+//row [2]:  c20  c21  c22  c23 
+
+
+typedef std::pair<int,int> RowColIndex;
+// the deeper vector has size 3 (aei for example)
+// the outer vector has size 4
+typedef std::vector<std::vector<RowColIndex> > Matrix;
+
+size_t getRandomNumber(size_t up)
+{
+    return rand() % up;
+}
+
+struct Configuration
+{
+    Configuration(const Matrix& matrix) : matrix_(matrix){}
+    Matrix matrix_;
+};
+
+std::ostream& operator<<(std::ostream& os,const Configuration& toPrint)
+{
+    for (size_t row = 0; row < toPrint.matrix_.at(0).size(); row++)
+    {
+        for (size_t col = 0; col < toPrint.matrix_.size(); col++)
+        {
+            os << toPrint.matrix_.at(col).at(row).first  << "," 
+               << toPrint.matrix_.at(col).at(row).second << '\t';
+        }
+        os << '\n';
+    }   
+    return os;
+}
+
+struct Energy 
+{ 
+    double operator()(const Configuration& conf)
+    {
+        double result = 0;
+        for (size_t col = 0; col < conf.matrix_.size(); col++)
+        {
+            for (size_t row =0; row < conf.matrix_.at(col).size(); row++)
+            {
+                result += pow(static_cast<double>(row) - static_cast<double>(conf.matrix_.at(col).at(row).first),2) +
+                          pow(static_cast<double>(col) - static_cast<double>(conf.matrix_.at(col).at(row).second),2);
+            }
+        }
+        return result;
+    }
+};
+
+size_t calculateNewColumn(std::vector<int>& isAlreadyUse)
+{
+    size_t random;
+    do
+    {
+        random = getRandomNumber(isAlreadyUse.size());
+    }
+    while (isAlreadyUse.at(random) != 0);
+
+    isAlreadyUse.at(random) = 1;
+    return random;
+}
+
+Configuration createConfiguration(size_t numberOfRow,size_t numberOfColumn)
+{
+    //create suitable matrix
+    Matrix matrix;
+    //add empty column vector
+    for (size_t col = 0; col < numberOfColumn; col++)
+        matrix.push_back(std::vector<RowColIndex>());
+
+    //loop over all the element
+    for (size_t row = 0; row < numberOfRow; row++)
+    {
+        std::vector<int> isAlreadyUse(numberOfColumn);
+        for (size_t col = 0; col < numberOfColumn; col++)
+        {
+            size_t newCol = calculateNewColumn(isAlreadyUse);
+            matrix.at(newCol).push_back(std::make_pair(row,col));
+        }
+    }   
+
+    return Configuration(matrix);
+}
+
+
+struct CreateNewConfiguration
+{
+    Configuration operator()(const Configuration& conf)
+    {
+        Configuration result(conf);
+
+        size_t fromRow = getRandomNumber(result.matrix_.at(0).size());
+
+        size_t fromCol = getRandomNumber(result.matrix_.size());
+        size_t toCol = getRandomNumber(result.matrix_.size());
+
+        result.matrix_.at(fromCol).at(fromRow) = conf.matrix_.at(toCol).at(fromRow);
+        result.matrix_.at(toCol).at(fromRow) = conf.matrix_.at(fromCol).at(fromRow);
+
+        return result;
+    }
+};
+
+template<typename Conf,typename CalcEnergy,typename CreateRandomConf>
+Conf Annealing(const Conf& start,CalcEnergy energy,CreateRandomConf createNewConfiguration,
+               int maxIter = 100000,double minimumEnergy = 1.0e-005)
+{
+    Conf first(start);
+    int iter = 0;
+    while (iter < maxIter && energy(first) > minimumEnergy )
+    {
+        Configuration newConf(createNewConfiguration(first));
+        if( energy(first) > energy(newConf))
+        {
+            first = newConf;
+        }
+        iter++;
+    }
+    return first;
+}
+
+int main(int argc,char* argv[])
+{
+
+    size_t nRows = 25;
+    size_t nCols = 25;
+    std::vector<Configuration> res;
+    for (int i =0; i < 10; i++)
+    {
+        std::cout << "Configuration #" << i << std::endl;
+        Configuration c = createConfiguration(nRows,nCols);
+        res.push_back(Annealing(c,Energy(),CreateNewConfiguration()));
+    }
+
+    std::vector<Configuration>::iterator it = res.begin();
+
+
+    std::vector<Configuration>::iterator lowest = it;
+    while (++it != res.end())
+    {
+        if (Energy()(*it) < Energy()(*lowest))
+            lowest = it;
+    }
+
+    std::cout << Energy()(*lowest) << std::endl;
+
+    std::cout << std::endl;
+
+    std::cout << *lowest << std::endl;
+
+
+    std::cin.get();
+    return 0;
+}
